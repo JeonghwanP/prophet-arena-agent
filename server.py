@@ -65,13 +65,13 @@ class EventRequest(BaseModel):
     close_time: str
     outcomes: list[str] = []
 
-    # Allow extra fields (e.g. resolved_outcome in test data) without error
-    model_config = {"extra": "allow"}
-
+class OutcomeProbability(BaseModel):
+    outcome: str
+    probability: float
 
 class PredictionResponse(BaseModel):
     """Response returned to the evaluation harness."""
-    probabilities: list[float]
+    probabilities: list[OutcomeProbability]
     rationale: str
 
 
@@ -213,7 +213,7 @@ async def predict_endpoint(event: EventRequest) -> PredictionResponse:
     # Convert our internal `p_yes` (for the FIRST outcome) into a `probabilities` array
     n_outcomes = max(1, len(event.outcomes))
     
-    if n_outcomes == 1:
+    if n_outcomes <= 1:
         probs = [p_yes]
     else:
         # p_yes is the probability for outcomes[0].
@@ -224,7 +224,16 @@ async def predict_endpoint(event: EventRequest) -> PredictionResponse:
         # Make sure they exactly sum to 1.0 (float math precision)
         probs = [round(p, 4) for p in probs]
 
-    return PredictionResponse(probabilities=probs, rationale=rationale)
+    # Build the required array of objects
+    prob_objects = []
+    if event.outcomes:
+        for i, outcome_name in enumerate(event.outcomes):
+            prob_objects.append(OutcomeProbability(outcome=outcome_name, probability=probs[i]))
+    else:
+        # Fallback if no outcomes provided
+        prob_objects.append(OutcomeProbability(outcome="YES", probability=probs[0]))
+
+    return PredictionResponse(probabilities=prob_objects, rationale=rationale)
 
 
 @app.get("/health")
