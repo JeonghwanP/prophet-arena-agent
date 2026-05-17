@@ -67,7 +67,7 @@ class EventRequest(BaseModel):
 
 class OutcomeProbability(BaseModel):
     market: str
-    p_yes: float
+    probability: float
 
 class PredictionResponse(BaseModel):
     """Response returned to the evaluation harness."""
@@ -228,10 +228,10 @@ async def predict_endpoint(event: EventRequest) -> PredictionResponse:
     prob_objects = []
     if event.outcomes:
         for i, outcome_name in enumerate(event.outcomes):
-            prob_objects.append(OutcomeProbability(market=outcome_name, p_yes=probs[i]))
+            prob_objects.append(OutcomeProbability(market=outcome_name, probability=probs[i]))
     else:
         # Fallback if no outcomes provided
-        prob_objects.append(OutcomeProbability(market="YES", p_yes=probs[0]))
+        prob_objects.append(OutcomeProbability(market="YES", probability=probs[0]))
 
     return PredictionResponse(probabilities=prob_objects, rationale=rationale)
 
