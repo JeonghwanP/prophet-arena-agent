@@ -1,41 +1,57 @@
-# ai-prophet
+# Future Unemployed - AI Prophet Forecasting Agent
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![PyPI: ai-prophet-core](https://img.shields.io/badge/PyPI-ai--prophet--core-blue.svg)](https://pypi.org/project/ai-prophet-core/)
-[![PyPI: ai-prophet](https://img.shields.io/badge/PyPI-ai--prophet-blue.svg)](https://pypi.org/project/ai-prophet/)
-[![Discord](https://img.shields.io/badge/Discord-join-blue.svg?logo=discord)](https://discord.gg/aTsY7979zP)
 
-LLM benchmark client and SDK for Prophet Arena prediction-market evaluation.
+A high-performance forecasting agent built for the **Prophet Arena Hackathon (Forecasting Track)**. 
 
-## Packages
+The agent uses **Gemini 2.5 Flash** connected to **OpenRouter's Web Search** plugin to perform real-time research. It employs a "market-anchoring" strategy: it first searches for live odds on Polymarket/Kalshi and uses them as a baseline, only deviating when it uncovers compelling, unpriced evidence.
 
-- `packages/core` - typed SDK (`ai-prophet-core`) for API models and client calls
-- `packages/cli` - benchmark runner and CLI package (`ai-prophet`, command `prophet`)
+To protect API budgets during the continuous 2-week evaluation window, the agent is wrapped in a **FastAPI server with an Adaptive Smart Cache**.
 
-## Docs
+## Project Structure
+- `my_agent.py` — Core forecasting logic, web search integration, and robust JSON parsing/retries.
+- `server.py` — FastAPI HTTP server implementing the `/predict` endpoint and the Smart Cache.
+- `run_agent.sh` — Organizer-friendly script to launch the agent.
+- `Dockerfile` — Docker configuration for easy cloud deployment.
 
-- [Build a trading bot](docs/build_a_bot.md) - end-to-end guide for writing
-  a custom bot against the Prophet Arena benchmark using `ai-prophet-core`
-- [Using the sample datasets](docs/using_sample_datasets.md) - pull a
-  ready-made event slate from `ai-prophet-datasets` via `prophet forecast retrieve`
+## Running the Agent (For Organizers)
 
-## Local Setup
+We have provided a unified script that checks dependencies, installs them, and starts the server on port 8000.
 
-```bash
-python -m pip install -e packages/core
-python -m pip install -e "packages/cli[dev]"
-pre-commit install
-```
-
-## Checks
+**Prerequisites:** Python 3.11+ and an OpenRouter API key.
 
 ```bash
-ruff check --config packages/cli/pyproject.toml packages/core packages/cli
-pytest packages/core/tests
-pytest packages/cli/tests
+# 1. Export your API credentials
+export OPENAI_API_KEY="sk-or-v1-..."
+export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+
+# 2. Run the agent script
+bash run_agent.sh
 ```
+
+The agent will be available at:
+- Prediction endpoint: `POST http://localhost:8000/predict`
+- Health/Stats endpoint: `GET http://localhost:8000/health`
+
+### Using Docker
+If you prefer running via Docker:
+```bash
+docker build -t prophet-agent .
+docker run -p 8000:8000 \
+  -e OPENAI_API_KEY="sk-or-v1-..." \
+  -e OPENAI_BASE_URL="https://openrouter.ai/api/v1" \
+  prophet-agent
+```
+
+## Architecture Details
+
+- **Model:** `google/gemini-2.5-flash:online` (using Exa web search).
+- **Caching:** 
+  - Events closing >24 hours away: Cached for 12 hours.
+  - Events closing <24 hours away: Cached for 1 hour.
+  - Already closed events: Cached for 30 minutes.
+- **Resilience:** Features a 5-strategy regex JSON parser. If parsing fails (e.g., model outputs markdown links instead of JSON), the agent automatically runs a cheap, text-only retry prompt to extract the probability.
 
 ## License
-
 MIT. See `LICENSE`.
