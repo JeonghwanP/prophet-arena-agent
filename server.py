@@ -71,7 +71,7 @@ class EventRequest(BaseModel):
 
 class PredictionResponse(BaseModel):
     """Response returned to the evaluation harness."""
-    p_yes: float
+    probabilities: list[float]
     rationale: str
 
 
@@ -195,16 +195,36 @@ async def predict_endpoint(event: EventRequest) -> PredictionResponse:
     # Check cache first
     cached = _cache.get(ticker)
     if cached is not None:
-        return PredictionResponse(**cached)
+        # The cache stores our internal format {"p_yes": float, "rationale": str}
+        # We need to convert it to the array format for the response.
+        p_yes = cached["p_yes"]
+        rationale = cached["rationale"]
+    else:
+        # Cache miss — run the forecasting engine
+        event_dict = event.model_dump()
+        result = my_agent.forecast(event_dict)
 
-    # Cache miss — run the forecasting engine
-    event_dict = event.model_dump()
-    result = my_agent.forecast(event_dict)
+        # Store in cache with smart TTL (store internal format)
+        _cache.put(ticker, event.close_time, result)
+        
+        p_yes = result["p_yes"]
+        rationale = result["rationale"]
 
-    # Store in cache with smart TTL
-    _cache.put(ticker, event.close_time, result)
+    # Convert our internal `p_yes` (for the FIRST outcome) into a `probabilities` array
+    n_outcomes = max(1, len(event.outcomes))
+    
+    if n_outcomes == 1:
+        probs = [p_yes]
+    else:
+        # p_yes is the probability for outcomes[0].
+        # Distribute the remaining probability equally among the remaining outcomes.
+        p_other = (1.0 - p_yes) / (n_outcomes - 1)
+        probs = [p_yes] + [p_other] * (n_outcomes - 1)
+        
+        # Make sure they exactly sum to 1.0 (float math precision)
+        probs = [round(p, 4) for p in probs]
 
-    return PredictionResponse(p_yes=result["p_yes"], rationale=result["rationale"])
+    return PredictionResponse(probabilities=probs, rationale=rationale)
 
 
 @app.get("/health")
